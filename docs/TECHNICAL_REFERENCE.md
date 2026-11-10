@@ -11,6 +11,7 @@ Sharing logic, I/O map, CAN protocol, module setup, configuration and the struct
 - [Module setup](#module-setup)
 - [Configuration](#configuration)
 - [Flow tabs](#flow-tabs)
+- [RFID and stop-PIN rules](#rfid-and-stop-pin-rules)
 - [Placeholders in the published flow](#placeholders-in-the-published-flow)
 
 ## Power sharing logic
@@ -101,7 +102,7 @@ Node `set min/max limits + sinexcel_cfg (Tonhe 2+2x30kW, G2 addr 3,4, rev3)` in 
 
 ## Flow tabs
 
-The flow has 19 tabs, 1437 nodes and 340 function nodes.
+The flow has 17 tabs, 1405 nodes and 325 function nodes.
 
 | Tab | Role |
 |---|---|
@@ -109,20 +110,36 @@ The flow has 19 tabs, 1437 nodes and 340 function nodes.
 | `pep_ws(Gun1)` · `pep_ws2(Gun2)` | power-electronics websocket to the vSECC charging manager, one per connector |
 | `CCS1_connector_check` · `CCS2_connector_check` | per-connector session logic: authorization (FIX#AUTHBOUNCE, FIX#AUTHWD), RemoteStart / Stop, contactors |
 | `Digital_i/o` | AC and DC contactors, R6, fan, emergency stop, Mag feedback |
-| `MQTT To HMI` · `HMI_flow` · `RFID Routing` | DWIN HMI screen, start / stop buttons, QR display, RFID (FIX#HMIFLAGS); a disabled copy of `RFID Routing` is kept |
-| `External Fault MQTT` | exact fault / status values → raised / cleared events with OCPP 1.6J-ready error codes |
+| `DWIN_HMI` | DWIN display: a page per connector, start / stop, QR codes, RFID router, stop-PIN keypad, admin PIN, OCPP offline icon, door / water / smoke / tilt / breaker-trip state, max-power figures, HMI event log (`/hmi-log`). A disabled copy of the older `RFID Routing` tab is kept. |
+| `External Fault MQTT` | exact fault / status values → raised / cleared events with OCPP 1.6J-ready error codes — **disabled** in the published flow |
 | `imd_simulation` · `BlueJay_IMD_Test` | insulation monitoring (Bluejay GYDCG-UBCS1 IMD × 2, switched by CableCheck) |
-| `SoC Cutoff 90%` | hard stop at 90 % state of charge (FIX#SOC) |
+| `SoC Cutoff 90%` | hard stop at 90 % state of charge (FIX#SOC) — **disabled** in the published flow |
 | `Monitor` · `Loop Lag Monitor` · `dashboard` | portable monitor snapshot (auto-detects the module brand), event-loop lag alarm, Node-RED dashboard |
 | `Flow 2` | session-state test injects and helpers |
 
+## RFID and stop-PIN rules
+
+Implemented in the `DWIN_HMI` tab (function *RFID Router — STOP requires head VP* and its neighbours).
+
+| Situation | Behaviour |
+|---|---|
+| Card scanned to start | The scan is sent to the backend as a start request and kept pending for 60 s. The charging page appears only after the matching `topic/RFIDCommand/response`. |
+| Card scanned to stop | Accepted only after the STOP button of that connector was pressed (valid for 60 s) and only from the card that started the session. |
+| Card scanned with no STOP target | Ignored. A card alone never selects a connector, so one shared card cannot stop the other connector. |
+| Different card on stop | Rejected; nothing is sent. |
+| Same card again within 1.5 s, or a retained message | Ignored. |
+| Stop PIN typed on the keypad | Published to `topic/charger/verify_stop_password/{connector}` (1–10 digits). Verification and the stop itself are done by the charge-point client. |
+
+Router decisions are published as `rfid/router/decision` without the card number.
+
 ## Placeholders in the published flow
 
-The published flow is the REV 3 flow as delivered to the cabinet, with six fields changed by [`tools/sanitize_flow.js`](../tools/sanitize_flow.js). Everything else — all 1437 nodes, their ids and wiring — is identical.
+The published flow is the owner's current REV 3 flow with seven fields changed by [`tools/sanitize_flow.js`](../tools/sanitize_flow.js). Everything else — all 1405 nodes, their ids and wiring — is identical.
 
 | Where | Public copy |
 |---|---|
-| `ADMIN_PASSWORD` in *Admin Numpad* (tab `RFID Routing`) and *Admin Numpad (login optional)* (tab `MQTT To HMI`) | `"0000"` — set your own PIN |
+| `ADMIN_PASSWORD` in *Admin Numpad* (tab `DWIN_HMI`) | `"0000"` — set your own PIN |
+| Test PIN in the inject nodes *Test H1: 10-digit PIN* and *Test H2: 10-digit PIN* (tab `DWIN_HMI`) | `"0000000000"` |
 | Server of the broker nodes `SukritJa_Broker` and `MON out (dashboard central)` | `broker.example.invalid` — set your own broker |
 | Client id of `SukritJa_Broker` | empty (Node-RED generates one) |
 | Info text of the comment node in `External Fault MQTT` | broker address replaced |

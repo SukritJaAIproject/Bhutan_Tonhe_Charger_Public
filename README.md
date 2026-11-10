@@ -73,9 +73,9 @@ REV 3 was deployed in the cabinet on 10 November 2026 and tested with two cars t
 
 - In every single-car test the car drew exactly the limit the cabinet announced, so the cabinet set the power.
 - The bus tie was never opened by mistake: the protection flags `tieVeto`, `noload` and `shareDegraded` stayed `false` in the whole log.
-- The two-car test ended when the car on connector 1 reached 90 % state of charge and the cabinet's SoC cutoff stopped it, as designed.
+- The two-car test ended when the car on connector 1 reached 90 % state of charge and the cabinet's SoC cutoff stopped it, as designed. (The cutoff tab is switched off in the current flow.)
 
-<sub>Source: vSECC `power-electronics-com-1/2.log`, 1 s averages. Raw series: [`docs/data/field_test_rev3_20261110.csv`](docs/data/field_test_rev3_20261110.csv). The measurements come from one test day with two cars.</sub>
+<sub>Source: vSECC `power-electronics-com-1/2.log`, 1 s averages. Raw series: [`docs/data/field_test_rev3_20261110.csv`](docs/data/field_test_rev3_20261110.csv). The measurements come from one test day with two cars. The HMI and RFID tab was reworked after this test; every power-control tab of the published flow is node for node the one that ran in it.</sub>
 
 ## How it works
 
@@ -123,13 +123,16 @@ The I/O map, relay list and sharing rules are in the [technical reference](docs/
 | | No-load and share watchdogs | If the tie is closed and no current flows, or the helper group delivers nothing, the flow falls back to the connector's own group. Time-based, with start-up grace. |
 | | Module fault monitor | Tracks every module on CAN: online, stale, fault words, wrong address. |
 | | Emergency stop | One input stops both connectors, debounced against noise. |
-| | SoC cutoff | Stops a session at 90 % state of charge; the threshold is one constant in the flow. |
+| | SoC cutoff (optional) | A tab that stops a session at 90 % state of charge. Included, switched off by default. |
 | | Insulation monitoring | Two IMDs, switched in for the cable check. |
 | **Operation** | OCPP-ready limits and remote control | Takes power and current limits, RemoteStart and RemoteStop from an OCPP client over MQTT. |
 | | Plug-in authorization | Authorizes the car on plug-in and holds it at 0 A until a start command arrives; a watchdog recovers a stuck authorization. |
-| | Touch HMI | Start / stop, QR display, RFID and a PIN-protected admin screen on a DWIN display. |
+| | Touch HMI | One `DWIN_HMI` tab drives the DWIN display: a page per connector, start / stop, QR codes, a stop-PIN keypad and a PIN-protected admin screen. |
+| | RFID sessions | A card starts a session once the backend authorizes it. Stopping needs the STOP button of that connector and the card that started it, so a shared card cannot stop the other connector. |
+| | Site status on screen | OCPP offline, emergency stop, door, water, smoke, tilt and breaker trip are shown on the display. |
 | **Service** | Decision trace | Publishes the sharing state, limits and reasons to MQTT; the vSECC stores them in its log. |
-| | Fault events | Raised / cleared fault events with OCPP 1.6J-ready error codes on an external MQTT broker. |
+| | Fault events (optional) | Raised / cleared fault events with OCPP 1.6J-ready error codes on an external MQTT broker. Included, switched off by default. |
+| | HMI event log | The last 2000 HMI events on a web page served by Node-RED (`/hmi-log`), with card numbers masked. |
 | | Health monitoring | Module health heartbeat every 30 s and an event-loop lag alarm for Node-RED itself. |
 
 ## Technical specifications
@@ -146,9 +149,9 @@ The I/O map, relay list and sharing rules are in the [technical reference](docs/
 | **Power-module interface** | CAN 125 kbit/s, 29-bit IDs, Tonhe protocol V1.3 · command refresh 500 ms |
 | **Charge controller** | Vector vSECC running Node-RED |
 | **Backend** | OCPP 1.6J through a separate charge-point client (EdgeBox RPI200), connected over MQTT |
-| **HMI** | DWIN touch display · RFID · QR |
+| **HMI** | DWIN touch display · RFID · QR · stop-PIN keypad · event log page |
 | **Insulation monitoring** | 2 × Bluejay GYDCG-UBCS1 |
-| **Flow** | 19 tabs · 1437 nodes · 340 function nodes |
+| **Flow** | 17 tabs · 1405 nodes · 325 function nodes |
 | **License** | MIT |
 
 > [!IMPORTANT]
@@ -158,7 +161,7 @@ The I/O map, relay list and sharing rules are in the [technical reference](docs/
 
 | Included | Description |
 |---|---|
-| [`flows_Bhutan_120kW_Tonhe_REV3_public.json`](flows_Bhutan_120kW_Tonhe_REV3_public.json) | The complete Node-RED flow, revision **TONHE-BHUTAN-3**, as deployed to the cabinet. The admin PIN and the external broker address are placeholders. |
+| [`flows_Bhutan_120kW_Tonhe_REV3_public.json`](flows_Bhutan_120kW_Tonhe_REV3_public.json) | The complete Node-RED flow, revision **TONHE-BHUTAN-3** with the HMI and RFID update of 10 Nov 2026. The PINs and the external broker address are placeholders. |
 | [`docs/`](docs) | Engineering notes, technical reference, troubleshooting guide, diagrams and the measured data. |
 | [`tools/`](tools) | Flow validator, sandbox simulator and log-analysis scripts. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Revision history. |
@@ -167,8 +170,8 @@ The I/O map, relay list and sharing rules are in the [technical reference](docs/
 
 ## Get started
 
-1. **Set your own values.** The published flow carries placeholders: `ADMIN_PASSWORD` in the two *Admin Numpad* nodes and the server address of the broker nodes `SukritJa_Broker` and `MON out (dashboard central)`. See [placeholders](docs/TECHNICAL_REFERENCE.md#placeholders-in-the-published-flow).
-2. **Check the configuration node** `set min/max limits + sinexcel_cfg (…)` against your hardware: module addresses, module ratings and the current limit. See [configuration](docs/TECHNICAL_REFERENCE.md#configuration).
+1. **Set your own values.** The published flow carries placeholders: `ADMIN_PASSWORD` in the *Admin Numpad* node and the server address of the broker nodes `SukritJa_Broker` and `MON out (dashboard central)`. See [placeholders](docs/TECHNICAL_REFERENCE.md#placeholders-in-the-published-flow).
+2. **Check the configuration node** `set min/max limits + sinexcel_cfg (…)` against your hardware: module addresses, module ratings and the current limit. See [configuration](docs/TECHNICAL_REFERENCE.md#configuration). The max-power figures shown on the screen are separate constants in *Max Power Dynamic/Fixed* (tab `DWIN_HMI`); set them to your cabinet as well.
 3. **Import** the file in the Node-RED editor on the vSECC (menu → Import), then **Deploy → Full**.
 4. **Enter the MQTT broker password** if your broker needs one. Node-RED exports never carry credentials.
 5. **Verify**: the status of *Calculate Power/Current* and *function 4*, and a `vsecc/pe/tonhe_health` message every 30 s.
@@ -206,7 +209,8 @@ Released under the [MIT License](LICENSE), without warranty of any kind.
 - ซอฟต์แวร์ควบคุม (Node-RED flow บน Vector vSECC) ของตู้ชาร์จ DC 120 kW แบบ 2 หัว ใช้ power module Tonhe 30 kW จำนวน 4 ตัว แบ่งเป็น 2 กลุ่ม กลุ่มละ 2 ตัว
 - มีรถคันเดียว: รีเลย์ R6 ขนานบัสสองกลุ่ม หัวนั้นได้ครบ 4 โมดูล สูงสุด 120 kW — มีรถสองคัน: R6 เปิด ได้หัวละ 60 kW
 - ผลทดสอบในตู้จริง 10 พ.ย. 2026: หัว 1 ชาร์จหัวเดียวได้ 119.2 kW, หัว 2 ชาร์จหัวเดียวได้ 119.1 kW, ชาร์จสองหัวพร้อมกันได้หัวละ 59 kW และ R6 ไม่ถูกสั่งเปิดผิดเลยตลอด log
-- ไฟล์ flow ใน repo นี้เป็นฉบับเผยแพร่: PIN หน้าจอ admin เป็นค่าตัวอย่าง `0000` และที่อยู่ MQTT broker ภายนอกเป็น `broker.example.invalid` ต้องตั้งค่าของตัวเองก่อน Deploy
+- อัปเดต 10 พ.ย. 2026 (หลังการทดสอบ): ปรับหน้าจอ HMI และเงื่อนไข RFID ใหม่ในแท็บเดียว `DWIN_HMI` — หยุดด้วย RFID ต้องกดปุ่ม STOP ของหัวนั้นก่อนแล้วแตะบัตรใบเดิมที่ใช้เริ่มชาร์จ, มีแป้น Stop PIN, แสดงสถานะ OCPP offline / ประตู / น้ำ / ควัน / เอียง และมีหน้า log `/hmi-log`; ส่วนควบคุมกำลังไม่เปลี่ยน
+- ไฟล์ flow ใน repo นี้เป็นฉบับเผยแพร่: PIN เป็นค่าตัวอย่าง (`0000`) และที่อยู่ MQTT broker ภายนอกเป็น `broker.example.invalid` ต้องตั้งค่าของตัวเองก่อน Deploy
 - flow เขียนสำหรับตู้นี้โดยเฉพาะ และไม่ใช่ผลิตภัณฑ์ที่ผ่านการรับรอง ต้องตรวจสอบกับฮาร์ดแวร์ของตัวเองก่อนใช้งานจริง (ไฟฟ้าแรงสูง)
 - รายละเอียดเชิงวิศวกรรมอยู่ในโฟลเดอร์ [`docs/`](docs)
 
