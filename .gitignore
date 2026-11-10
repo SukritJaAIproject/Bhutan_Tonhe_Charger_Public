@@ -1,0 +1,28 @@
+# Node-RED credentials and keys - never commit
+flows_cred.json
+*_cred.json
+.vsecc_hlc_auth.json
+*.key
+*.pem
+.env
+
+# Logs, captures and archives from the cabinet (can contain VINs, MACs, tokens)
+*.log
+*.log.*
+*.gz
+*.pcap
+*.pcap0
+*.pcapng
+*.zip
+vsecc_logs*/
+container-data-backup*/
+
+# Editor / OS / Office temp files
+~$*
+*.tmp
+.~lock.*
+Thumbs.db
+desktop.ini
+.DS_Store
+__pycache__/
+node_modules/
